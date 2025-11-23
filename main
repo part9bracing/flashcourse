@@ -1,0 +1,963 @@
+<div id="bracing-flashcards-root"></div>
+
+<script>
+// =======================
+// CONFIG: CSV URL & COLUMNS
+// =======================
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQg8BZ3fe-gA3XO4DOtHyk7DKZ39ckA-B9tBd2FxpZijI2jJ5oNHwXEv9Ewv_mR_NmGFj-t0OQazgU6/pub?output=csv";
+
+// Core columns
+const COL_ID       = "ID";
+const COL_CATEGORY = "Category";
+const COL_KEYWORDS = "Keywords";
+const COL_GLOSSARY = "Glossary_Terms";
+
+// Code flags
+const CODE_COLUMNS = ["BCBC2024", "NBC2025", "NBC2030"];
+
+// Question
+const COL_Q_TEXT   = "Question_Text";
+const COL_Q_IMAGE  = "Question_Image";
+const COL_Q_VIDEO  = "Question_Video";
+
+// Answer slide config
+const ANSWER_SLIDE_COUNT = 6;
+const ANSWER_FIELDS = {
+  text:               "Text",
+  image:              "Image",
+  video:              "Video",
+  codeRef:            "CodeRef",
+  courseRef:          "CourseRef",
+  interpretationFlag: "InterpretationFlag",
+  externalLink:       "ExternalLink",
+  extraNotes:         "ExtraNotes",
+  triggerTerms:       "TriggerGlossaryTerms",
+  additionalCodeRefs: "AdditionalCodeRefs"
+};
+
+// Tags / modes (decks)
+const TAG_COLUMNS = {
+  isKeyTerm:       "Is_KeyTerm",
+  isRule:          "Is_Rule",
+  isConcept:       "Is_Concept",
+  isDesignProcess: "Is_DesignProcess",
+  isConstruction:  "Is_Construction",
+  isExampleCase:   "Is_ExampleCase"
+};
+
+// Flags
+const COL_DISABLE_RANDOM    = "Disable_Random";
+const COL_SHOW_DISPUTE_BTN  = "Show_DisputeButton";
+const COL_SHOW_STREAK       = "Show_StreakEligible";
+
+// Optional styling prefs (not heavily used yet)
+const COL_BG_COLOR   = "Preferred_Background_Color";
+const COL_TEXT_COLOR = "Preferred_Text_Color";
+
+
+// =======================
+// STYLES  (desktop-first, responsive width)
+// =======================
+const style = document.createElement("style");
+style.textContent = `
+  #bracing-flashcards-root {
+    display: flex;
+    justify-content: center;
+    margin: 1.5rem 0;
+    font-family: Arial, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: #000000;
+  }
+
+  .bf-card-wrapper {
+    width: min(720px, 100%);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .bf-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+    flex-wrap: nowrap;
+  }
+
+  .bf-filters {
+    display: flex;
+    flex: 1;
+    gap: 0.3rem;
+  }
+
+  .bf-select {
+    flex: 1;
+    font-size: 0.8rem;
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    border: 1px solid #000000;
+    background: #ffffff;
+    color: #000000;
+    min-width: 0;
+  }
+
+  .bf-count {
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  .bf-card {
+    position: relative;
+    width: 100%;
+    border-radius: 16px;
+    border: 1px solid #000000;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.12);
+    overflow: hidden;
+    background: #f1ceee;
+    color: #000000;
+  }
+
+  .bf-inner {
+    position: relative;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .bf-face {
+    box-sizing: border-box;
+    padding: 1.25rem 1.75rem;
+    width: 100%;
+    min-height: 260px;      /* card has some height even with little content */
+  }
+
+  .bf-front {
+    background: #f1ceee;
+    display: block;         /* front visible by default */
+  }
+
+  .bf-back {
+    background: #b7e1cd;
+    display: none;          /* back hidden by default */
+    display: none;
+  }
+
+  .bf-label {
+    font-size: 1.6rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: #0f9ed5;
+    margin-bottom: 0.6rem;
+  }
+
+  .bf-question-text {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0.25rem 0 0.6rem;
+  }
+
+  .bf-question-image {
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    margin: 0.25rem 0 0.5rem;
+    border-radius: 12px;
+    border: 1px solid #000000;
+    background: #ffffff;
+    display: none;
+  }
+
+  .bf-footer-note {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: rgba(0,0,0,0.7);
+  }
+
+  .bf-back-content {
+    /* let back content grow to full height; page will scroll if needed */
+    margin-bottom: 0.6rem;
+  }
+
+  .bf-answer-text {
+    font-size: 1.25rem;
+    margin: 0.25rem 0 0.5rem;
+  }
+
+  .bf-answer-image {
+    width: 100%;
+    max-height: 200px;
+    object-fit: contain;
+    margin: 0.3rem 0 0.4rem;
+    border-radius: 12px;
+    border: 1px solid #000000;
+    background: #ffffff;
+    display: none;
+  }
+
+  .bf-answer-extra {
+    font-size: 0.9rem;
+    margin-top: 0.25rem;
+  }
+
+  .bf-meta-line {
+    font-size: 0.8rem;
+    margin-top: 0.2rem;
+  }
+
+  .bf-meta-line a {
+    color: #0f9ed5;
+    text-decoration: underline;
+  }
+
+  .bf-interpretation-warning {
+    margin-top: 0.4rem;
+    font-size: 0.8rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: 8px;
+    border: 1px dashed #000000;
+    background: rgba(255,255,255,0.6);
+  }
+
+  .bf-interpretation-warning strong {
+    text-transform: uppercase;
+  }
+
+  .bf-back-bottom {
+    margin-top: 0.6rem;
+  }
+
+  .bf-back-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .bf-back-arrow {
+    border-radius: 999px;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid #000000;
+    background: #ffffff;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+
+  .bf-back-arrow[disabled] {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .bf-dots {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .bf-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    border: 1px solid #000000;
+    background: rgba(255,255,255,0.5);
+  }
+
+  .bf-dot-active {
+    background: #000000;
+  }
+
+  .bf-dispute-btn {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    border-radius: 999px;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid #000000;
+    background: #ffffff;
+    cursor: pointer;
+  }
+
+  .bf-dispute-btn:hover {
+    filter: brightness(1.06);
+  }
+
+  .bf-controls {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .bf-btn {
+    flex: 1;
+    border-radius: 999px;
+    padding: 0.55rem 0.9rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid #000000;
+    text-align: center;
+  }
+
+  .bf-btn-primary {
+    background: #dbe9f7;
+    color: #000000;
+  }
+
+  .bf-btn-secondary {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  .bf-btn[disabled] {
+    opacity: 0.4;
+    cursor: default;
+  }
+
+  .bf-btn:hover:not([disabled]) {
+    filter: brightness(1.06);
+  }
+
+  .bf-link-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    border-radius: 999px;
+    padding: 0.25rem 0.6rem;
+    border: 1px solid #000000;
+    font-size: 0.75rem;
+    background: #ffffff;
+    cursor: pointer;
+    margin-top: 0.25rem;
+  }
+
+  .bf-link-button:hover {
+    filter: brightness(1.06);
+  }
+
+  .bf-link-button span {
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 700px) {
+    .bf-card-wrapper {
+      padding: 0 0.5rem;
+    }
+
+    .bf-face {
+      padding: 1rem 1.25rem;
+      min-height: 220px;
+    }
+
+    .bf-label {
+      font-size: 1.4rem;
+    }
+
+    .bf-question-text,
+    .bf-answer-text {
+      font-size: 1.1rem;
+    }
+
+    .bf-btn {
+      padding: 0.7rem 0;
+      font-size: 1rem;
+    }
+  }
+`;
+document.head.appendChild(style);
+
+
+// =======================
+// CSV HELPERS
+// =======================
+function parseCSV(text) {
+  const rows = [];
+  let cur = "", inQuotes = false, row = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (inQuotes && text[i+1] === '"') { cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (ch === "," && !inQuotes) {
+      row.push(cur); cur = "";
+    } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      if (cur.length || row.length) { row.push(cur); rows.push(row); row = []; cur = ""; }
+    } else {
+      cur += ch;
+    }
+  }
+  if (cur.length || row.length) row.push(cur), rows.push(row);
+  return rows.filter(r => r.length && r.some(c => c.trim() !== ""));
+}
+
+function csvToObjects(text) {
+  const rows = parseCSV(text);
+  const header = rows[0];
+  return rows.slice(1).map(r => {
+    const o = {};
+    header.forEach((h, i) => o[h.trim()] = (r[i] || "").trim());
+    return o;
+  });
+}
+
+
+// =======================
+// HELPERS
+// =======================
+function normalizeImageUrl(url) {
+  if (!url) return "";
+  const driveMatch1 = url.match(/https:\/\/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (driveMatch1) {
+    const id = driveMatch1[1];
+    return `https://drive.google.com/uc?export=view&id=${id}`;
+  }
+  if (url.includes("drive.usercontent.google.com")) {
+    const idMatch = url.match(/id=([^&]+)/);
+    if (idMatch) {
+      const id = idMatch[1];
+      return `https://drive.google.com/uc?export=view&id=${id}`;
+    }
+  }
+  return url;
+}
+
+function parseBool(val) {
+  if (!val) return false;
+  return /^(y|yes|true|1)$/i.test(val.trim());
+}
+
+function splitList(val) {
+  if (!val) return [];
+  return val
+    .split(/[;|,]/)
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlightTerms(text, terms) {
+  if (!text || !terms || !terms.length) return text;
+  let result = text;
+  terms.forEach(term => {
+    const safeTerm = term.trim();
+    if (!safeTerm) return;
+    const re = new RegExp(`(${escapeRegExp(safeTerm)})`, "gi");
+    result = result.replace(re, "<strong>$1</strong>");
+  });
+  return result;
+}
+
+
+// =======================
+// DATA TRANSFORM
+// =======================
+function transformRow(row) {
+  const card = {
+    id: row[COL_ID] || "",
+    category: row[COL_CATEGORY] || "",
+    keywords: splitList(row[COL_KEYWORDS]),
+    glossaryTerms: splitList(row[COL_GLOSSARY]),
+    codes: {},
+    question: {
+      text: row[COL_Q_TEXT] || "",
+      image: normalizeImageUrl(row[COL_Q_IMAGE] || ""),
+      video: row[COL_Q_VIDEO] || ""
+    },
+    slides: [],
+    tags: {},
+    flags: {
+      disableRandom: parseBool(row[COL_DISABLE_RANDOM]),
+      showDispute:   parseBool(row[COL_SHOW_DISPUTE_BTN]),
+      streakEligible:parseBool(row[COL_SHOW_STREAK])
+    }
+  };
+
+  CODE_COLUMNS.forEach(codeCol => {
+    card.codes[codeCol] = parseBool(row[codeCol]);
+  });
+
+  Object.entries(TAG_COLUMNS).forEach(([key, col]) => {
+    card.tags[key] = parseBool(row[col]);
+  });
+
+  const triggerTermsGlobal = card.glossaryTerms;
+
+  for (let i = 1; i <= ANSWER_SLIDE_COUNT; i++) {
+    const prefix = `Answer_${i}_`;
+    const slide = {
+      text: row[prefix + ANSWER_FIELDS.text] || "",
+      image: normalizeImageUrl(row[prefix + ANSWER_FIELDS.image] || ""),
+      video: row[prefix + ANSWER_FIELDS.video] || "",
+      codeRef: row[prefix + ANSWER_FIELDS.codeRef] || "",
+      courseRef: row[prefix + ANSWER_FIELDS.courseRef] || "",
+      interpretationFlag: parseBool(row[prefix + ANSWER_FIELDS.interpretationFlag]),
+      externalLink: row[prefix + ANSWER_FIELDS.externalLink] || "",
+      extraNotes: row[prefix + ANSWER_FIELDS.extraNotes] || "",
+      triggerTerms: splitList(row[prefix + ANSWER_FIELDS.triggerTerms]),
+      additionalCodeRefs: splitList(row[prefix + ANSWER_FIELDS.additionalCodeRefs])
+    };
+
+    const hasContent =
+      slide.text ||
+      slide.image ||
+      slide.video ||
+      slide.codeRef ||
+      slide.courseRef ||
+      slide.externalLink ||
+      slide.extraNotes ||
+      (slide.additionalCodeRefs && slide.additionalCodeRefs.length);
+
+    if (hasContent) {
+      slide.allTerms = [...triggerTermsGlobal, ...slide.triggerTerms];
+      card.slides.push(slide);
+    }
+  }
+
+  return card;
+}
+
+
+// =======================
+// UI TEMPLATE
+// =======================
+const root = document.getElementById("bracing-flashcards-root");
+root.innerHTML = `
+  <div class="bf-card-wrapper">
+    <div class="bf-toolbar">
+      <div class="bf-filters">
+        <select class="bf-select" id="bf-code">
+          <option value="All">All codes</option>
+          <option value="BCBC2024">BCBC 2024</option>
+          <option value="NBC2025">NBC 2025</option>
+          <option value="NBC2030">NBC 2030</option>
+        </select>
+        <select class="bf-select" id="bf-mode">
+          <option value="random">Random</option>
+          <option value="sequence">Sequence</option>
+        </select>
+        <select class="bf-select" id="bf-deck">
+          <option value="All">All</option>
+          <option value="Rules">Rules</option>
+          <option value="KeyTerms">Key terms</option>
+          <option value="Concepts">Concepts</option>
+          <option value="Construction">Construction</option>
+          <option value="DesignProcess">Design process</option>
+          <option value="Examples">Examples</option>
+        </select>
+      </div>
+      <div class="bf-count" id="bf-count">0 cards</div>
+    </div>
+
+    <div class="bf-card">
+      <div class="bf-inner" id="bf-inner">
+        <div class="bf-face bf-front" id="bf-front-face">
+          <div class="bf-label">Question</div>
+          <div class="bf-question-text" id="bf-question-text">Loading…</div>
+          <img id="bf-question-image" class="bf-question-image" alt="Question illustration">
+          <div id="bf-question-video-wrap"></div>
+          <div class="bf-footer-note">Click the card to flip · Use the buttons below to move between cards.</div>
+        </div>
+
+        <div class="bf-face bf-back" id="bf-back-face">
+          <div class="bf-label">Answer &amp; detail</div>
+          <div class="bf-back-content">
+            <div class="bf-answer-text" id="bf-answer-text"></div>
+            <img id="bf-answer-image" class="bf-answer-image" alt="Answer illustration">
+            <div class="bf-answer-extra" id="bf-answer-extra"></div>
+            <div class="bf-meta-line" id="bf-code-line"></div>
+            <div class="bf-meta-line" id="bf-course-line"></div>
+            <div class="bf-meta-line" id="bf-extra-code-line"></div>
+            <div class="bf-meta-line" id="bf-external-link-line"></div>
+            <div class="bf-interpretation-warning" id="bf-interpretation-warning" style="display:none;">
+              <strong>Interpretation:</strong> This explanation involves some judgement. Check with your local Authority Having Jurisdiction (AHJ) or official guidance before relying on it.
+            </div>
+          </div>
+          <div class="bf-back-bottom">
+            <div class="bf-back-nav">
+              <button class="bf-back-arrow" id="bf-back-prev">&#10094;</button>
+              <div class="bf-dots" id="bf-dots"></div>
+              <button class="bf-back-arrow" id="bf-back-next">&#10095;</button>
+            </div>
+            <button class="bf-dispute-btn" id="bf-dispute-btn" style="display:none;">
+              Raise a question / dispute this
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="bf-controls">
+      <button class="bf-btn bf-btn-secondary" id="bf-prev-card-btn">Previous card</button>
+      <button class="bf-btn bf-btn-primary"   id="bf-next-card-btn">Next card</button>
+    </div>
+  </div>
+`;
+
+
+// =======================
+// STATE
+// =======================
+const state = {
+  allCards: [],
+  filteredCards: [],
+  currentIndex: 0,
+  showingBack: false,
+  currentSlideIndex: 0,
+  mode: "random",
+  deck: "All",
+  code: "All",
+  history: [],
+  historyPos: -1
+};
+
+const els = {
+  count:        document.getElementById("bf-count"),
+  mode:         document.getElementById("bf-mode"),
+  deck:         document.getElementById("bf-deck"),
+  code:         document.getElementById("bf-code"),
+  inner:        document.getElementById("bf-inner"),
+  frontFace:    document.getElementById("bf-front-face"),
+  backFace:     document.getElementById("bf-back-face"),
+  questionText: document.getElementById("bf-question-text"),
+  questionImg:  document.getElementById("bf-question-image"),
+  questionVideoWrap: document.getElementById("bf-question-video-wrap"),
+  answerText:   document.getElementById("bf-answer-text"),
+  answerImg:    document.getElementById("bf-answer-image"),
+  answerExtra:  document.getElementById("bf-answer-extra"),
+  codeLine:     document.getElementById("bf-code-line"),
+  courseLine:   document.getElementById("bf-course-line"),
+  extraCodeLine:document.getElementById("bf-extra-code-line"),
+  externalLinkLine: document.getElementById("bf-external-link-line"),
+  interpWarn:   document.getElementById("bf-interpretation-warning"),
+  dots:         document.getElementById("bf-dots"),
+  backPrev:     document.getElementById("bf-back-prev"),
+  backNext:     document.getElementById("bf-back-next"),
+  disputeBtn:   document.getElementById("bf-dispute-btn"),
+  prevCardBtn:  document.getElementById("bf-prev-card-btn"),
+  nextCardBtn:  document.getElementById("bf-next-card-btn")
+};
+
+function setCount(text) {
+  els.count.textContent = text;
+}
+
+
+// =======================
+// FILTERING
+// =======================
+function cardMatchesDeck(card, deck) {
+  if (deck === "All") return true;
+  switch (deck) {
+    case "Rules":         return card.tags.isRule;
+    case "KeyTerms":      return card.tags.isKeyTerm;
+    case "Concepts":      return card.tags.isConcept;
+    case "Construction":  return card.tags.isConstruction;
+    case "DesignProcess": return card.tags.isDesignProcess;
+    case "Examples":      return card.tags.isExampleCase;
+    default: return true;
+  }
+}
+
+function cardMatchesCode(card, code) {
+  if (code === "All") return true;
+  return !!card.codes[code];
+}
+
+function applyFilters() {
+  const deck = state.deck;
+  const code = state.code;
+
+  const cards = state.allCards.filter(c =>
+    cardMatchesDeck(c, deck) &&
+    cardMatchesCode(c, code)
+  );
+
+  state.filteredCards = cards;
+  state.history = [];
+  state.historyPos = -1;
+
+  if (!cards.length) {
+    setCount("0 cards");
+    clearCardDisplay();
+    return;
+  }
+
+  setCount(`${cards.length} cards`);
+  showCardAtIndex(0, true);
+}
+
+function clearCardDisplay() {
+  els.questionText.textContent = "No cards available.";
+  els.questionImg.style.display = "none";
+  els.questionVideoWrap.innerHTML = "";
+  els.answerText.textContent = "";
+  els.answerImg.style.display = "none";
+  els.answerExtra.textContent = "";
+  els.codeLine.textContent = "";
+  els.courseLine.textContent = "";
+  els.extraCodeLine.textContent = "";
+  els.externalLinkLine.textContent = "";
+  els.interpWarn.style.display = "none";
+  els.dots.innerHTML = "";
+}
+
+
+// =======================
+// RENDERING
+// =======================
+function showFront() {
+  state.showingBack = false;
+  els.frontFace.style.display = "block";
+  els.backFace.style.display  = "none";
+}
+
+function showBack() {
+  if (!state.filteredCards.length) return;
+  state.showingBack = true;
+  els.frontFace.style.display = "none";
+  els.backFace.style.display  = "block";
+}
+
+function showCardAtIndex(idx, addToHistory = true) {
+  if (!state.filteredCards.length) return;
+  const card = state.filteredCards[idx];
+  state.currentIndex = idx;
+  state.currentSlideIndex = 0;
+
+  // history tracking
+  if (addToHistory) {
+    if (state.historyPos < state.history.length - 1) {
+      state.history = state.history.slice(0, state.historyPos + 1);
+    }
+    state.history.push(idx);
+    state.historyPos = state.history.length - 1;
+  }
+
+  const qTerms = card.glossaryTerms;
+  const qText = highlightTerms(card.question.text, qTerms);
+  els.questionText.innerHTML = qText || "(no question)";
+
+  if (card.question.image) {
+    els.questionImg.src = card.question.image;
+    els.questionImg.style.display = "block";
+  } else {
+    els.questionImg.style.display = "none";
+  }
+
+  if (card.question.video) {
+    els.questionVideoWrap.innerHTML = `
+      <button class="bf-link-button" type="button" onclick="window.open('${card.question.video}','_blank')">
+        <span>▶</span><span>Watch question video</span>
+      </button>
+    `;
+  } else {
+    els.questionVideoWrap.innerHTML = "";
+  }
+
+  renderBackSlide(card, 0);
+  showFront();
+  updateCardNavButtons();
+}
+
+function renderBackSlide(card, slideIndex) {
+  const slides = card.slides;
+  if (!slides.length) {
+    els.answerText.textContent = "(no answer configured for this card)";
+    els.answerImg.style.display = "none";
+    els.answerExtra.textContent = "";
+    els.codeLine.textContent = "";
+    els.courseLine.textContent = "";
+    els.extraCodeLine.textContent = "";
+    els.externalLinkLine.textContent = "";
+    els.interpWarn.style.display = "none";
+    els.dots.innerHTML = "";
+    els.backPrev.disabled = true;
+    els.backNext.disabled = true;
+    els.disputeBtn.style.display = card.flags.showDispute ? "inline-block" : "none";
+    return;
+  }
+
+  const slide = slides[slideIndex] || slides[0];
+  state.currentSlideIndex = slideIndex;
+
+  const terms = slide.allTerms || [];
+  const ansText = highlightTerms(slide.text, terms);
+  const extraNotes = highlightTerms(slide.extraNotes, terms);
+
+  els.answerText.innerHTML = ansText || "(no answer text)";
+  if (slide.image) {
+    els.answerImg.src = slide.image;
+    els.answerImg.style.display = "block";
+  } else {
+    els.answerImg.style.display = "none";
+  }
+  els.answerExtra.innerHTML = extraNotes || "";
+
+  els.codeLine.textContent  = slide.codeRef   ? `Code reference: ${slide.codeRef}` : "";
+  els.courseLine.textContent= slide.courseRef ? `Course reference: ${slide.courseRef}` : "";
+
+  if (slide.additionalCodeRefs && slide.additionalCodeRefs.length) {
+    els.extraCodeLine.textContent = `Additional code refs: ${slide.additionalCodeRefs.join(", ")}`;
+  } else {
+    els.extraCodeLine.textContent = "";
+  }
+
+  if (slide.externalLink) {
+    els.externalLinkLine.innerHTML = `Related link: <a href="${slide.externalLink}" target="_blank" rel="noopener">Open</a>`;
+  } else {
+    els.externalLinkLine.textContent = "";
+  }
+
+  els.interpWarn.style.display = slide.interpretationFlag ? "block" : "none";
+
+  if (card.flags.showDispute) {
+    els.disputeBtn.style.display = "inline-block";
+    els.disputeBtn.onclick = () => {
+      const subject = encodeURIComponent(`Flashcard feedback: ${card.id || "(no ID)"}`);
+      const body = encodeURIComponent(
+        `Card ID: ${card.id || ""}\nCategory: ${card.category || ""}\nSlide: ${state.currentSlideIndex + 1}\n\nPlease describe your concern or suggested change:\n`
+      );
+      window.location.href = `mailto:info@part9bracing.ca?subject=${subject}&body=${body}`;
+    };
+  } else {
+    els.disputeBtn.style.display = "none";
+    els.disputeBtn.onclick = null;
+  }
+
+  // dots
+  els.dots.innerHTML = "";
+  slides.forEach((_, i) => {
+    const dot = document.createElement("div");
+    dot.className = "bf-dot" + (i === state.currentSlideIndex ? " bf-dot-active" : "");
+    els.dots.appendChild(dot);
+  });
+
+  els.backPrev.disabled = slides.length <= 1 || state.currentSlideIndex <= 0;
+  els.backNext.disabled = slides.length <= 1 || state.currentSlideIndex >= slides.length - 1;
+}
+
+
+// =======================
+// CARD NAVIGATION
+// =======================
+function updateCardNavButtons() {
+  els.prevCardBtn.disabled = state.historyPos <= 0;
+  els.nextCardBtn.disabled = state.filteredCards.length <= 1;
+}
+
+function showNextCard() {
+  if (!state.filteredCards.length) return;
+
+  // if we're in the middle of history, go forward in history first
+  if (state.historyPos < state.history.length - 1) {
+    state.historyPos++;
+    const idx = state.history[state.historyPos];
+    showCardAtIndex(idx, false);
+    return;
+  }
+
+  const n = state.filteredCards.length;
+
+  if (state.mode === "sequence") {
+    const idx = (state.currentIndex + 1) % n;
+    showCardAtIndex(idx, true);
+  } else {
+    if (n === 1) return;
+    let idx = Math.floor(Math.random() * n);
+    if (idx === state.currentIndex) idx = (idx + 1) % n;
+    showCardAtIndex(idx, true);
+  }
+}
+
+function showPrevCard() {
+  if (!state.filteredCards.length) return;
+  if (state.historyPos <= 0) return;
+  state.historyPos--;
+  const idx = state.history[state.historyPos];
+  showCardAtIndex(idx, false);
+}
+
+
+// =======================
+// EVENTS
+// =======================
+els.inner.addEventListener("click", (e) => {
+  const target = e.target;
+  if (
+    target.closest("button") ||
+    target.closest("a") ||
+    target === els.backPrev ||
+    target === els.backNext ||
+    target === els.prevCardBtn ||
+    target === els.nextCardBtn
+  ) {
+    return;
+  }
+  if (state.showingBack) showFront();
+  else showBack();
+});
+
+els.backPrev.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const card = state.filteredCards[state.currentIndex];
+  if (!card || !card.slides.length) return;
+  if (state.currentSlideIndex > 0) {
+    renderBackSlide(card, state.currentSlideIndex - 1);
+  }
+});
+
+els.backNext.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const card = state.filteredCards[state.currentIndex];
+  if (!card || !card.slides.length) return;
+  if (state.currentSlideIndex < card.slides.length - 1) {
+    renderBackSlide(card, state.currentSlideIndex + 1);
+  }
+});
+
+els.mode.addEventListener("change", () => {
+  state.mode = els.mode.value;
+  applyFilters();
+});
+
+els.deck.addEventListener("change", () => {
+  state.deck = els.deck.value;
+  applyFilters();
+});
+
+els.code.addEventListener("change", () => {
+  state.code = els.code.value;
+  applyFilters();
+});
+
+els.nextCardBtn.addEventListener("click", () => {
+  showNextCard();
+});
+
+els.prevCardBtn.addEventListener("click", () => {
+  showPrevCard();
+});
+
+
+// =======================
+// LOAD DATA
+// =======================
+fetch(CSV_URL)
+  .then(r => r.text())
+  .then(text => {
+    const rows = csvToObjects(text);
+    const cards = rows.map(transformRow);
+    state.allCards = cards;
+
+    if (!cards.length) {
+      setCount("0 cards");
+      clearCardDisplay();
+      return;
+    }
+
+    applyFilters();
+  })
+  .catch(err => {
+    console.error(err);
+    setCount("0 cards (error)");
+  });
+</script>
